@@ -1,0 +1,237 @@
+FUNCTIONAL AND TECHNICAL SPECIFICATIONS FOR:
+
+MIDI MONITOR DLL FOR POWERTRACKS PRO
+
+		by Eric Rangell
+
+DISCLAIMER:
+This program is being distributed in the public domain,
+so it can be used without charge, and you may 
+create derivative works from it, as long you agree
+that the author has no warranty obligations or
+liability for any use or modification of this program, 
+and you acknowledge the original copyright on any
+derivative work with the following statement:
+
+Midi Monitor technology adapted from:
+"Midi Monitor DLL for PowerTracks Pro Audio"
+Copyright 1998, Eric Rangell.
+
+Overview:
+	This DLL is used to display real time midi data
+that is sent from Powertracks Pro in a color graphic display.
+The user will first load the DLL from the mixer window of
+Powertracks, then load a song or start a jukebox file playing,
+and then flip to the Midi Monitor window (using Alt-Tab) 
+to watch the song data displayed in real time as it plays.
+
+The display will be organized as follows:
+
+When the DLL is invoked, a full screen window will be created 
+with a black background, and 16 white rectangular columns will be 
+drawn on the screen to represent the 16 MIDI channels.  
+These columns will be labelled 1-16 at the bottom of the screen.
+
+Initial Release: The display will assume 640x480 VGA resolution.
+Future Enhancement: The display can detect the user's resolution
+and scale itself to fit the available area, and adjust for resizing.
+
+After the window is created, a messagebox will be displayed
+to inform the user that the DLL has successfully loaded.
+
+Also, global memory should be allocated for an array which
+will store the current color of each midi channel.  The color
+will be chosen based on the instrument that is playing.
+(Release 1.02 - the global memory allocation was causing GPF
+problems for users of Powertracks 3.5a and up.  A different
+strategy was implemented: to use MakeProcInstance to pass
+16 variables to the next instance of the program).
+
+
+Initial release: Colors are hardcoded based on General Midi
+banks as follows:
+
+Program#, Bank		Color		RGB value
+=============================================
+00-07	Piano		Red		255,0,0
+08-15	Chrom. Perc.	Peach		255,127,127
+16-23	Organ		Orange		255,127,0
+24-31	Guitar		Green		0,255,0
+32-39	Bass		Purple		255,127,255
+40-47	Strings		Pink		255,127,255
+48-55	Ensemble	Dk Pink		255,0,127
+56-63	Brass		Yellow		255,255,0
+64-71	Reeds		Lt Yellow	255,255,127
+72-79	Pipes		Lt Blue		0,255,255
+80-87	Synth Lead	Dk Green	0,127,0
+88-95	Synth Pad	Lt Purple	255,0,255
+96-103	Synth FX	Lt Green		0,255,127
+104-111	Ethnic		Lt Blue		127,255,255
+112-119	Percussive	Gray		127,127,127
+120-127	Special FX	White		255,255,255
+
+When the DLL is first loaded, the color of each channel
+is set to Green (0,255,0) as a default.  
+
+Future enhancement: Give the user flexibility to assign colors
+to instruments and save default colors in an INI file.
+
+The window will then set up a timer to be invoked every 50
+milliseconds.  (Future release - store this value in an INI file)
+
+Upon receiving a WM_TIMER message, the code will 
+invalidate the entire window and call the UpdateWindow
+function to post a WM_PAINT message to the window's
+message queue.
+
+WM_PAINT should do the following:
+
+- Redraw the rectangular columns and labels if necessary.
+
+- Repeatedly call a function: GetEvent to check if a 
+midi message was posted to Powertrack's midi queues,
+until no more messages are found.  The GetEvent
+function should return 1 if data was found, and 0
+if no data was found.
+	
+- When a midi message is found (GetEvent returns 1),
+perform one of the following functions.  These functions 
+should be passed the handle to the device context so 
+they can draw on the screen, and the three bytes of 
+midi data from the message.
+
+	- ProcessNoteEvent	(for 0x80-0x9F)
+	- ProcessProgChg	(for 0xC0-0xCF)
+	- ProcessPitchBend	(for 0xE0-0xEF)
+
+- After the loop is done, validate the window and 
+close the device context.
+
+
+Function GetEvent	
+(int *sts, int *data1, int *data2) returns int
+=================================
+Compare the MidiEventHead and MidiEventTail of the midi event queue 
+created by Powertracks.  If they are equal, return 0.
+
+Otherwise, look at the data pointed to by the MidiEventTail.  Keep 
+bumping the tail pointer until one of the midi events you are looking for
+is found (Note On/Off, Program Change, Pitch Bend),
+or you reach the head pointer.  You have to be able to wrap around
+the tail pointer when it reaches the maximum value of the queue 
+index (1000).
+
+If one of the above events is found, break the event into 3 bytes
+(sts, data1, data2) and return 1, else return 0.
+
+
+Function ProcessNoteEvent:	
+(HDC myhdc, int sts, int data1, int data2)
+===============================
+
+This function will display or erase a line on the screen 
+that represents a note event.  The column in which the
+line is displayed is determined by the midi channel of
+the note event.  The color of the line is determined by
+the current color of the channel (which is determined
+by program change events), and whether it is a note on
+or a note off.  The length of the line is determined by 
+the velocity of the note.  The width of each column
+should be used to scale the length of this line, and the
+line should be drawn centered within the column.
+
+For example, if you have 32 pixels in a column and 
+the velocity value is 64, then the length of the line
+would be 64/128 * 32 or 16.  This line should be
+centered by having 8 pixels to the left of center
+and 8 pixels to the right of center.
+
+The vertical position and width of the line should be 
+determined by the note number, and scaled according 
+to the range of notes you want to display (ex: 21-108 for 
+a piano, or 0-127 for all possible midi notes).  Low notes
+should be displayed towards the bottom of the screen
+and high notes towards the top.
+
+For example, if you have 384 pixels to work with, you can
+allow a width of 3 pixels per note position if you want to
+be able to display all notes in the range 0-127.
+
+For note offs, a line with the full width of the column 
+should be drawn in the window background color (black).
+
+
+Function ProcessProgramChange
+(HDC myhdc, int sts, int data1, int data2)
+===============================
+
+Use the sts byte to determine the midi channel that
+is changing its program.  Then use the data1 byte
+to look up the new color for the channel and modify
+the value in the color array for the specified channel.
+
+Initial release: Divide the data1 byte by 8 and use
+a case statement to assign the new color.
+
+Future enhancement: Look up data1 in an array
+that stores the user's color preferences.
+
+
+Function ProcessPitchBend
+(HDC myhdc, int sts, int data1, int data2)
+===============================
+Pitch bend events will appear as moving green bars
+below the main columns of the screen but above the
+column labels.  Each midi channel will have one of 
+these areas to display pitch bends as they occur.
+
+A bend from a lower note to the normal note will display
+as a bar decreasing in size whose left edge moves towards
+the center.  A bend from a normal note to a higher note
+will display as a bar increasing in size from the center
+towards the right edge of the column.  Notes that bend
+down to a lower note will show a bar increasing in size
+as it moves from the center to the left edge.  Notes that
+bend down from a higher note will show a bar decreasing
+in size from the right edge moving towards the center.
+
+It is enough to use the high order byte (data2) of the 
+pitch bend message for this display.  
+
+If data2 is less than 64, use 64-data2 as the width and draw
+from the midpoint - (width/2) to the midpoint.
+
+If data2 is greater than 64, use data2-64 as the width and draw
+from the midpoint to midpoint + (width/2).
+
+If data2 equals 64, draw a black bar (current window background)
+for the entire width of the column, to erase any previous bar.
+
+
+Other ideas for future enhancements: 
+============================
+Create additional displays for other types of midi events.
+(Controller changes, volume changes, sysex???)
+
+Create a display that shows notes with letters as follows:
+
+Channel:	
+1	C   E  G  b	(lower case flats.. or)
+2	  d   F  a		(upper case sharps)
+...
+10	*     **   ***	(drum part)
+
+
+Provide buttons to allow the user to start and stop
+playback from within the DLL window.
+
+I am hoping that programmers more skilled than I
+can bring these ideas to light and release this power
+to the public.  This has potential applications for
+Midi Captioning for hearing impaired people, and
+can be used in music videos and concerts,
+and it can greatly enhance music appreciation and
+education.
+
+Thank you
+... Eric Rangell (erang@compuserve.com)

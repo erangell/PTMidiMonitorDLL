@@ -1,0 +1,11 @@
+MIDMON22.ZIP is an add-on to Powertracks Pro Audio that gives you a
+real-time graphic display of MIDI data (pitch, velocity, instrument,
+controllers, pitch bend, pedals, channel balance).  It also includes
+event transforms, history trails, tempo changes, a text note letter
+display, and free source code.  Release 2.02 gives you the ability
+to resize the display window.  This release works with PT Pro Audio
+and is backward compatible to older versions.  This is FREEWARE because
+it can be useful for hearing impaired people and music students, so
+please distribute widely.  Please read the README.TXT file for
+installation instructions and documentation.
+
